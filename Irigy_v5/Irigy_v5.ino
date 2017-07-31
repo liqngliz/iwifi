@@ -47,8 +47,34 @@ void setup() {
 
 
 void loop() {
-  WiFiClient client = server.available();   // listen for incoming clients
+  WiFiClient clientAP = server.available();   // listen for incoming clients
+  //Start AP server and print out all device data
+  APserver(clientAP);
 
+  
+}
+
+
+
+
+
+//Functions
+
+void wifiConnection() {
+  // attempt to connect to Wifi network:
+  while (status != WL_CONNECTED) {
+    Serial.print("Attempting to connect to Network named: ");
+    Serial.println(ssid);                   // print the network name (SSID);
+
+    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
+    status = WiFi.begin(ssid.c_str(), pass.c_str());
+    // wait 10 seconds for connection:
+    delay(10000);
+  }
+}
+
+void APserver (WiFiClient client){
+  
   if (client) {                             // if you get a client,
     Serial.println("new client");           // print a message out the serial port
     String currentLine = "";                // make a String to hold incoming data from the client
@@ -87,19 +113,6 @@ void loop() {
     client.stop();
     Serial.println("client disonnected");
   }
+  
 }
-
-void wifiConnection() {
-  // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to Network named: ");
-    Serial.println(ssid);                   // print the network name (SSID);
-
-    // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    status = WiFi.begin(ssid.c_str(), pass.c_str());
-    // wait 10 seconds for connection:
-    delay(10000);
-  }
-}
-
 
