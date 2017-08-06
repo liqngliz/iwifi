@@ -1,24 +1,15 @@
 /*
   WiFi Web Server LED Blink
 
- A simple web server that lets you blink an LED via the web.
- This sketch will print the IP address of your WiFi Shield (once connected)
- to the Serial monitor. From there, you can open that address in a web browser
- to turn on and off the LED on pin 9.
-
- If the IP address of your shield is yourAddress:
- http://yourAddress/H turns the LED on
- http://yourAddress/L turns it off
+ A simple web server and AP that lets you connect to the device via device AP and
+ logon to your network wifi with HTTP /GET.
+ /GET /pwid:password%ssid
 
  This example is written for a network using WPA encryption. For
  WEP or WPA, change the Wifi.begin() call accordingly.
 
- Circuit:
- * WiFi shield attached
- * LED attached to pin 9
-
- created 25 Nov 2012
- by Tom Igoe
+ created Aug 2017
+ by Ang Li
  */
 #include <SPI.h>
 #include <WiFi.h>
@@ -49,7 +40,17 @@ void setup() {
 void loop() {
   WiFiClient clientAP = server.available();   // listen for incoming clients
   //Start AP server and print out all device data
-  APserver(clientAP);
+  if (clientAP) {                             // if you get a client,
+    Serial.println("new client");           // print a message out the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    String Data = "";                    //data of full request
+    String getData = "";
+    Data = readRequest(currentLine, getData, clientAP);
+    // close the connection:
+    Serial.println("GET data request: ");
+    //clientAP.stop();
+    //Serial.println("client disonnected");
+  }
 
   
 }
@@ -73,12 +74,9 @@ void wifiConnection() {
   }
 }
 
-void APserver (WiFiClient client){
+String readRequest (String currentLine, String GetData, WiFiClient client){
   
-  if (client) {                             // if you get a client,
-    Serial.println("new client");           // print a message out the serial port
-    String currentLine = "";                // make a String to hold incoming data from the client
-    while (client.connected()) {            // loop while the client's connected
+  while (client.connected()) {            // loop while the client's connected
       if (client.available()) {             // if there's bytes to read from the client,
         char c = client.read();             // read a byte, then
         Serial.write(c);                    // print it out the serial monitor
@@ -105,14 +103,29 @@ void APserver (WiFiClient client){
             currentLine = "";
           }
         } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          //Serial.println(c);
           currentLine += c;      // add it to the end of the currentLine
+          currentLine.trim();
+          //if the current line ends with HTTP/1.1 GetData
+          if (currentLine.startsWith("GET") && currentLine.endsWith("HTTP/")) {
+            //Retrieve the GET data
+            String lastData = GetData;
+            GetData = currentLine;
+            GetData.remove(0,4);
+            GetData.remove(GetData.indexOf("HTTP/"));
+
+            if (GetData.endsWith(".ico") || GetData.endsWith(".txt")) {
+            GetData = lastData;
+            } 
+            
+            return GetData;
+            Serial.println(GetData);
+            
+            
+            }
+            
         }
       }
-    }
-    // close the connection:
-    client.stop();
-    Serial.println("client disonnected");
   }
-  
-}
+} 
 

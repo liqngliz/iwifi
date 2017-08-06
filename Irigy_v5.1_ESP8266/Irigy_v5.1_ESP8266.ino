@@ -1,4 +1,3 @@
-
 /*
   WiFi Web Server and HTTP GET with simple string API
 
@@ -25,32 +24,15 @@
  by Ang Li
  */
 #include <SPI.h>
-#include <WiFi.h>
-#include <elapsedMillis.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 
-//Device Parameters
-String DeviceID = "18c29d17-71ea-11e7-9c8c-e0db55fe78c8";
-String WaterID = "18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
-int humlvl = 280;
-int alert = 0;
-int Mode = 0;
-int HumMax = 324;
-int HumMin = 100; 
-int Quantity = 1500;  //in seconds
-int WaterNow = 0;
-int Timer = 12;       //in hours
-
-elapsedMillis timeElapsed;
-unsigned int interval = 20000;
-
-//Connection parameters
 String ssid = "Testing";      //  your network SSID (name)
 String pass = "testing";   // your network password
 String dssid = "irigyv1";      //  your network SSID (name)
 String dpass = "irigyv12";   // your network password
 
-const char* host = "www.oneviewdigital.com";
-
+int keyIndex = 0;                 // your network key Index number (needed only for WEP)
 
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
@@ -103,61 +85,6 @@ void loop() {
     
   }
 
-  //if not connected to wifi stop loop here
-  if (status != WL_CONNECTED) {
-    return;
-  }
-  
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  int httpPort = 80;
-  String testRequest = "/?DeviceID=18c29d17-71ea-11e7-9c8c-e0db55fe78c8&humlvl=280&Alert=0&WateredID=18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
-  
-  //make a request every 20 seconds.
-
-  String resp = "";
-  
-  if (timeElapsed > interval) 
-  {       
-    resp = webServerRequest(client, httpPort, testRequest);
-    Serial.println ("the resp is:");
-    resp = serverResponse (resp);
-    
-    timeElapsed = 0;       // reset the counter to 0 so the counting starts over...
-  }
-
-  //get the key and request
-  if (parseDataKey(resp).endsWith("mmxmnqtwnt")) {
-    Serial.println("Key: ");
-    Serial.println (parseDataKey(resp));
-    
-    Serial.println("Mode: ");
-    Mode = parseDataAsString(resp, 1).toInt();
-    Serial.println(Mode);
-
-    Serial.println("HumMax: ");
-    HumMax = parseDataAsString(resp, 2).toInt();
-    Serial.println(HumMax);
-    
-    Serial.println("HumMin: ");
-    HumMin = parseDataAsString(resp, 3).toInt();
-    Serial.println(HumMin);
-
-    Serial.println("Quantity: ");
-    Quantity = parseDataAsString(resp, 4).toInt();
-    Serial.println(Quantity);
-
-    Serial.println("WaterNow: ");
-    WaterNow = parseDataAsString(resp, 5).toInt();
-    Serial.println(WaterNow);
-    
-    Serial.println("Timer: ");
-    Timer = parseDataAsString(resp, 6).toInt();
-    Serial.println(Timer);
-  }
-  
-  client.stop();
-
 }
 
 
@@ -165,74 +92,6 @@ void loop() {
 
 
 //Functions
-
-//parse server response
-
-/*
-<!doctype html>
-
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>The HTML5 Herald</title>
-</head>
-<body>
-  mmxmnqtwnt:0%324%100%1500%0%12
-</body>
-</html>
-
-0*/
-
-String serverResponse (String httpresponse) {
-  
-  httpresponse.remove(0, httpresponse.indexOf("<body>"));
-  httpresponse.remove(0,7);
-  httpresponse.remove(httpresponse.indexOf("</body>"));
-  httpresponse.trim();
-  Serial.println(httpresponse);
-  return httpresponse;
-}
-
-//Send a Get request to the server
-String webServerRequest (WiFiClient client, int httpPort, String request) {
-  Serial.print("connecting to ");
-  Serial.println(host);
-  
-  if (!client.connect(host, httpPort)) {
-    Serial.println("connection failed");
-    return "";
-  }
-  
-  // We now create a URI for the request
-  
-  Serial.print("Requesting: ");
-  Serial.println(request);
-  
-  // This will send the request to the server
-  client.print(String("GET ") + request + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" + 
-               "Connection: close\r\n\r\n");
-  unsigned long timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 5000) {
-      Serial.println(">>> Client Timeout !");
-      client.stop();
-      return "";
-    }
-  }
-  String response = "";
-  // Read all the lines of the reply from server and print them to Serial
-  while(client.available()){
-    char c = client.read();
-    response += c;
-  }
-
-  Serial.print (response);
-  response.trim();
-  return response;
-}
-
-
 //Parse GET request data to get Key with no ":"
 String parseDataKey (String data) {
   //Get the key of the substring Data
@@ -242,7 +101,7 @@ String parseDataKey (String data) {
 //Parse string to get data as a string, starts with 1 as position
 String parseDataAsString (String data, int dataPosition){
   //we can parse up to 16 different string requests each data position is separated by a %
-  //pwssid:L4T-STAGE%Passl4twifi1@%
+  //pwssid:Livebox-B15C%C2F59CD5699AF134E5E9145E4F
   String dataNoKey = data.substring(data.indexOf(":")+1);
   String currData = "";
   int n = 0;
@@ -272,11 +131,11 @@ String parseDataAsString (String data, int dataPosition){
 //Connect to Wifi
 void wifiConnection() {
   // attempt to connect to Wifi network:
-  while (status != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named: ");
     Serial.println(ssid);                   // print the network name (SSID);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-    status = WiFi.begin(ssid.c_str(), pass.c_str());
+    WiFi.begin(ssid.c_str(), pass.c_str());
     // wait 10 seconds for connection:
     delay(10000);
   }
