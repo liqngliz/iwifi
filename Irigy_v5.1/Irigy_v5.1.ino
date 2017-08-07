@@ -27,6 +27,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <elapsedMillis.h>
+#include <Preferences.h>
 
 //Device Parameters
 String DeviceID = "18c29d17-71ea-11e7-9c8c-e0db55fe78c8";
@@ -39,15 +40,19 @@ int HumMin = 100;
 int Quantity = 1500;  //in seconds
 int WaterNow = 0;
 int Timer = 12;       //in hours
+String extraData = "";
+
+//Device preferences store
+Preferences preferences;
 
 elapsedMillis timeElapsed;
 unsigned int interval = 20000;
 
 //Connection parameters
-String ssid = "Testing";      //  your network SSID (name)
-String pass = "testing";   // your network password
-String dssid = "irigyv1";      //  your network SSID (name)
-String dpass = "irigyv12";   // your network password
+String ssid = "";      //  your network SSID (name)
+String pass = "";   // your network password
+String dssid = "irigy";      //  your network SSID (name)
+String dpass = "irigy";   // your network password
 
 const char* host = "www.oneviewdigital.com";
 
@@ -56,22 +61,55 @@ int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
 void setup() {
+  //Start serial communications
   Serial.begin(9600);      // initialize serial communication
-  pinMode(2, OUTPUT);      // set the LED pin mode
+  delay(500);
+  Serial.println();
+  Serial.println("Starting Irigy");
+  //Start preferences RW mode
+  preferences.begin("irigy", false);
+  //preferences.clear();
+  //preferences.getString("dpass", "watermyplant");
+  
+  //Set variables for AP broadcast
+  dssid = preferences.getString("dssid", "irigy");
+  dpass = preferences.getString("dpass", "watermyplant");
 
+  Serial.println("AP:");
+  Serial.println(dssid);
+  Serial.println(dpass);
+  
+  //Set SSID and Pass a for logon
+  ssid = preferences.getString("ssid", "");
+  pass = preferences.getString("pass", "");
+  
+
+  delay(500);
   WiFi.mode(WIFI_AP_STA);
+  
   WiFi.softAP(dssid.c_str(), dpass.c_str());
   
- // wifiConnection();
- // printWifiStatus();
+  if (ssid.length() > 0) {
+    Serial.println("Connecting to: ");
+    Serial.println(ssid);
+    Serial.println("password: ");
+    Serial.println(pass);
+    wifiConnection();
+    printWifiStatus();
+  }
+  Serial.println("Wifi:");
+  Serial.println(ssid);
+  Serial.println(pass);
+  
   server.begin();                           // start the web server on port 80
 
-  //Serial.println(WiFi.softAPIP());
-
+ 
+  
 }
 
 
 void loop() {
+  delay(1000);
   WiFiClient clientAP = server.available();   // listen for incoming clients
   //Start AP server and print out all device data
   if (clientAP) {                             // if you get a client,
@@ -82,7 +120,7 @@ void loop() {
     // logon to Wifi
     Serial.println("Key: ");
     Serial.println (parseDataKey(Data));
-    if (parseDataKey(Data).endsWith("pwssid")){
+    if (parseDataKey(Data).endsWith("pwssid") && parseDataKey(Data).length() == 6){
       
       Serial.println("new SSID: ");
       Serial.println (parseDataAsString(Data, 1));
@@ -91,27 +129,53 @@ void loop() {
       Serial.println("new Pass: ");
       Serial.println (parseDataAsString(Data, 2));
       pass = parseDataAsString(Data, 2);
-
+      
+      preferences.putString("ssid", ssid);
+      preferences.putString("pass", pass);
+      
+      Serial.println (preferences.getString("pass", ssid));
+      
       //Wifi connection
       wifiConnection();
       printWifiStatus();
+    } else if (parseDataKey(Data).endsWith("dpwssid") && parseDataKey(Data).length() == 7){
+      //save SSID data AP
+        dssid = parseDataAsString(Data, 1);
+        dpass = parseDataAsString(Data, 2);
+        preferences.putString("dssid", dssid);
+        preferences.putString("dpass", dpass);
+        Serial.println("AP Changed");
     }
-
+    
      // close the connection:
     clientAP.stop();
     Serial.println("client disonnected");
-    
+
   }
 
+  //Reset all variables on button press
+  static uint8_t lastPinState = 1;
+  uint8_t pinState = digitalRead(0);
+  if(!pinState && lastPinState){
+        Serial.println("Button Pressed");
+        preferences.clear();
+  }
+    lastPinState = pinState;
+    //while(Serial.available()) Serial.write(Serial.read());
+  
   //if not connected to wifi stop loop here
   if (status != WL_CONNECTED) {
     return;
   }
   
+  
   // Use WiFiClient class to create TCP connections
   WiFiClient client;
   int httpPort = 80;
-  String testRequest = "/?DeviceID=18c29d17-71ea-11e7-9c8c-e0db55fe78c8&humlvl=280&Alert=0&WateredID=18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
+  //Build request
+  //String testRequest = "/?DeviceID=18c29d17-71ea-11e7-9c8c-e0db55fe78c8&humlvl=280&Alert=0&WateredID=18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
+  
+  String Request = "/?DeviceID=" + DeviceID + "&humlvl=" + String(humlvl) + "&Alert=" + String(alert) + "&WateredID=" + WaterID;
   
   //make a request every 20 seconds.
 
@@ -119,7 +183,7 @@ void loop() {
   
   if (timeElapsed > interval) 
   {       
-    resp = webServerRequest(client, httpPort, testRequest);
+    resp = webServerRequest(client, httpPort, Request);
     Serial.println ("the resp is:");
     resp = serverResponse (resp);
     
@@ -168,23 +232,8 @@ void loop() {
 
 //parse server response
 
-/*
-<!doctype html>
-
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>The HTML5 Herald</title>
-</head>
-<body>
-  mmxmnqtwnt:0%324%100%1500%0%12
-</body>
-</html>
-
-0*/
-
 String serverResponse (String httpresponse) {
-  
+  //Gets the httpresponse, removes files and keeps request
   httpresponse.remove(0, httpresponse.indexOf("<body>"));
   httpresponse.remove(0,7);
   httpresponse.remove(httpresponse.indexOf("</body>"));
@@ -272,6 +321,8 @@ String parseDataAsString (String data, int dataPosition){
 //Connect to Wifi
 void wifiConnection() {
   // attempt to connect to Wifi network:
+  int n = 0;
+  
   while (status != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named: ");
     Serial.println(ssid);                   // print the network name (SSID);
@@ -279,7 +330,16 @@ void wifiConnection() {
     status = WiFi.begin(ssid.c_str(), pass.c_str());
     // wait 10 seconds for connection:
     delay(10000);
+    
+    n = n + 1;
+    Serial.println("Attempt: ");
+    Serial.println(n);
+    if (n > 3) {
+    Serial.println("Connection Timeout");
+    break;
+    }
   }
+  
 }
 
 //Print Wifi Status
