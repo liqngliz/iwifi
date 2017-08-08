@@ -30,6 +30,7 @@
 #include <Preferences.h>
 
 //Device Parameters
+//DeviceID, WaterID, Mode, HumMax, HumMin, Quantity, Timer, dssid, ssid, WiFiConnected, extraData
 String DeviceID = "18c29d17-71ea-11e7-9c8c-e0db55fe78c8";
 String WaterID = "18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
 int humlvl = 280;
@@ -41,6 +42,7 @@ int Quantity = 1500;  //in seconds
 int WaterNow = 0;
 int Timer = 12;       //in hours
 String extraData = "";
+String WiFiConnected = "false";
 
 //Device preferences store
 Preferences preferences;
@@ -66,10 +68,19 @@ void setup() {
   delay(500);
   Serial.println();
   Serial.println("Starting Irigy");
+  
   //Start preferences RW mode
   preferences.begin("irigy", false);
-  //preferences.clear();
-  //preferences.getString("dpass", "watermyplant");
+  
+  //Get Preferences for device settings before power off
+  DeviceID = preferences.getString("DeviceID","");
+  WaterID = preferences.getString("WaterID", "");
+  
+  Mode = preferences.getInt("Mode", 0);
+  HumMax = preferences.getInt("HumMax", 324);
+  HumMin = preferences.getInt("HumMin", 100);
+  Quantity =  preferences.getInt("Quantity", 1500);
+  Timer = preferences.getInt("Timer", 12);
   
   //Set variables for AP broadcast
   dssid = preferences.getString("dssid", "irigy");
@@ -90,10 +101,6 @@ void setup() {
   WiFi.softAP(dssid.c_str(), dpass.c_str());
   
   if (ssid.length() > 0) {
-    Serial.println("Connecting to: ");
-    Serial.println(ssid);
-    Serial.println("password: ");
-    Serial.println(pass);
     wifiConnection();
     printWifiStatus();
   }
@@ -103,20 +110,31 @@ void setup() {
   
   server.begin();                           // start the web server on port 80
 
- 
+    delay(1000);
   
 }
 
 
 void loop() {
-  delay(1000);
+  //Check wifi status
+  if (status != WL_CONNECTED) {
+    WiFiConnected = "false";
+  } else {
+    WiFiConnected = "true";
+  }
+  
   WiFiClient clientAP = server.available();   // listen for incoming clients
   //Start AP server and print out all device data
   if (clientAP) {                             // if you get a client,
     Serial.println("new client");           // print a message out the serial port
     String Data = "";                       //Store data of GET request
     Data = readRequest(clientAP); //Parse the incoming request to get the GET request string
-   
+
+    //The response should not exceed 4 kilobyte, to prevent memory issues
+    if (Data.length() > 4096) {
+      return;
+    }
+    
     // logon to Wifi
     Serial.println("Key: ");
     Serial.println (parseDataKey(Data));
@@ -145,6 +163,16 @@ void loop() {
         preferences.putString("dssid", dssid);
         preferences.putString("dpass", dpass);
         Serial.println("AP Changed");
+    }
+
+    //Set the Device ID and Water ID
+    //dwID:DeviceID%WaterID
+    if (parseDataKey(Data).endsWith("dwID") && parseDataKey(Data).length() == 4) {
+      DeviceID = parseDataAsString(Data, 1);
+      WaterID = parseDataAsString(Data, 2);
+      preferences.putString("DeviceID", DeviceID);
+      preferences.putString("WaterID", WaterID);
+      Serial.println("ID Changed");
     }
     
      // close the connection:
@@ -187,6 +215,11 @@ void loop() {
     Serial.println ("the resp is:");
     resp = serverResponse (resp);
     
+    //Response should be less than 2 kilobyes
+    if (resp.length() > 4096) {
+      return;
+    }
+    
     timeElapsed = 0;       // reset the counter to 0 so the counting starts over...
   }
 
@@ -198,26 +231,48 @@ void loop() {
     Serial.println("Mode: ");
     Mode = parseDataAsString(resp, 1).toInt();
     Serial.println(Mode);
-
+    
+    if (Mode != preferences.getInt("Mode", 0)){
+      preferences.putInt("Mode", Mode);
+    }
+    
     Serial.println("HumMax: ");
     HumMax = parseDataAsString(resp, 2).toInt();
     Serial.println(HumMax);
+    
+    if (HumMax != preferences.getInt("HumMax", 324)){
+      preferences.putInt("HumMax", HumMax);
+    }
     
     Serial.println("HumMin: ");
     HumMin = parseDataAsString(resp, 3).toInt();
     Serial.println(HumMin);
 
+    if (HumMin != preferences.getInt("HumMin", 100)){
+      preferences.putInt("HumMin", HumMin);
+    }
+    
     Serial.println("Quantity: ");
     Quantity = parseDataAsString(resp, 4).toInt();
     Serial.println(Quantity);
 
+    if (Quantity != preferences.getInt("Quantity", 1500)){
+      preferences.putInt("Quantity", Quantity);
+    }
+    
     Serial.println("WaterNow: ");
     WaterNow = parseDataAsString(resp, 5).toInt();
     Serial.println(WaterNow);
     
+    
     Serial.println("Timer: ");
     Timer = parseDataAsString(resp, 6).toInt();
     Serial.println(Timer);
+
+    if (Quantity != preferences.getInt("Timer", 12)){
+      preferences.putInt("Timer", Timer);
+    }
+    
   }
   
   client.stop();
@@ -339,7 +394,7 @@ void wifiConnection() {
     break;
     }
   }
-  
+
 }
 
 //Print Wifi Status
@@ -375,15 +430,31 @@ String readRequest (WiFiClient client){
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.length() == 0) {
+            //Build JSON response : {"DeviceID":"","WaterID":"","Mode":"","HumMax":"","HumMin":"","Quantity":"","Timer":"","dssid":"","ssid":"","WiFiConnected":"","extraData":""}
+            String q = "&quot;";
+            String c = "&comma;";
+
+            String JSON = "{" + 
+                              q + "DeviceID" + q + ":" + q + DeviceID + q + c +
+                              q + "Mode" + q + ":" + q + String(Mode) + q + c +
+                              q + "HumMax" + q + ":" + q + String(HumMax) + q + c +
+                              q + "HumMin" + q + ":" + q + String(HumMin) + q + c +
+                              q + "Quantity" + q + ":" + q + String(Quantity) + q + c +
+                              q + "Timer" + q + ":" + q + String(Timer) + q + c +
+                              q + "dssid" + q + ":" + q + dssid + q + c +
+                              q + "ssid" + q + ":" + q + ssid + q + c +
+                              q + "WiFiConnected" + q + ":" + q + WiFiConnected + q + c +
+                              q + "extraData" + q + ":" + q + extraData + q +
+                           "}";
+             Serial.println(JSON);
             // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
             // and a content-type so the client knows what's coming, then a blank line:
             client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
             client.println();
-
             // the content of the HTTP response follows the header:
-            client.print("DATA 1<br>");
-            client.print("DATA 2<br>");
+            client.print(JSON);
+            client.print("<br>");
 
             // The HTTP response ends with another blank line:
             client.println();
