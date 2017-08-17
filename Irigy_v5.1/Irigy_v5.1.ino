@@ -24,10 +24,21 @@
  created Aug 2017
  by Ang Li
  */
+ /*
+ TODO Implement SSL - DO NOT USE GODADDY SSL, only have intermediate SSL
+ Symatec works
+ Digicert may work (to be tested)
+ */
+ 
 #include <SPI.h>
 #include <WiFi.h>
 #include <elapsedMillis.h>
 #include <Preferences.h>
+
+//Pin Settings for sensors
+
+int analogWaterPin = 32;
+int waterlvl = 0; 
 
 //Device Parameters
 //DeviceID, WaterID, Mode, HumMax, HumMin, Quantity, Timer, dssid, ssid, WiFiConnected, extraData
@@ -41,6 +52,7 @@ int HumMin = 100;
 int Quantity = 1500;  //in seconds
 int WaterNow = 0;
 int Timer = 12;       //in hours
+int lightlvl = 0;
 String extraData = "";
 String WiFiConnected = "false";
 
@@ -48,7 +60,9 @@ String WiFiConnected = "false";
 Preferences preferences;
 
 elapsedMillis timeElapsed;
-unsigned int interval = 20000;
+elapsedMillis measureTimeElapsed;
+unsigned short int interval = 20000;
+unsigned short int measuredelay = 1000;
 
 //Connection parameters
 String ssid = "";      //  your network SSID (name)
@@ -56,13 +70,15 @@ String pass = "";   // your network password
 String dssid = "irigy";      //  your network SSID (name)
 String dpass = "irigy";   // your network password
 
-const char* host = "www.oneviewdigital.com";
+const char* host = "www.irigapi.com";
 
 
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
 void setup() {
+  //initiate Pins
+  
   //Start serial communications
   Serial.begin(9600);      // initialize serial communication
   delay(500);
@@ -73,8 +89,8 @@ void setup() {
   preferences.begin("irigy", false);
   
   //Get Preferences for device settings before power off
-  DeviceID = preferences.getString("DeviceID","");
-  WaterID = preferences.getString("WaterID", "");
+  DeviceID = preferences.getString("DeviceID","18c29d17-71ea-11e7-9c8c-e0db55fe78c8");
+  WaterID = preferences.getString("WaterID", "18c29d31-71ea-11e7-9c8c-e0db55fe78c8");
   
   Mode = preferences.getInt("Mode", 0);
   HumMax = preferences.getInt("HumMax", 324);
@@ -110,12 +126,25 @@ void setup() {
   
   server.begin();                           // start the web server on port 80
 
-    delay(1000);
+  delay(1000);
   
 }
 
 
 void loop() {
+
+
+
+if (measureTimeElapsed > measuredelay) {
+  //Read the water level
+  waterlvl = 4095 - analogRead(analogWaterPin);
+  humlvl = waterlvl;
+  Serial.println(humlvl);
+  //Read the light level
+  
+  //Reset timer for next second
+  measureTimeElapsed = 0;
+}
   //Check wifi status
   if (status != WL_CONNECTED) {
     WiFiConnected = "false";
@@ -189,7 +218,6 @@ void loop() {
         preferences.clear();
   }
     lastPinState = pinState;
-    //while(Serial.available()) Serial.write(Serial.read());
   
   //if not connected to wifi stop loop here
   if (status != WL_CONNECTED) {
@@ -203,7 +231,7 @@ void loop() {
   //Build request
   //String testRequest = "/?DeviceID=18c29d17-71ea-11e7-9c8c-e0db55fe78c8&humlvl=280&Alert=0&WateredID=18c29d31-71ea-11e7-9c8c-e0db55fe78c8";
   
-  String Request = "/?DeviceID=" + DeviceID + "&humlvl=" + String(humlvl) + "&Alert=" + String(alert) + "&WateredID=" + WaterID;
+  String Request = "/?DeviceID=" + DeviceID + "&humlvl=" + String(humlvl) + "&lightlvl=" + String(lightlvl) + "&Alert=" + String(alert) + "&WateredID=" + WaterID;
   
   //make a request every 20 seconds.
 
@@ -220,7 +248,7 @@ void loop() {
       return;
     }
     
-    timeElapsed = 0;       // reset the counter to 0 so the counting starts over...
+    timeElapsed = 0;    // reset the counter to 0 so the counting starts over...
   }
 
   //get the key and request
@@ -437,6 +465,7 @@ String readRequest (WiFiClient client){
             String JSON = "{" + 
                               q + "DeviceID" + q + ":" + q + DeviceID + q + c +
                               q + "Mode" + q + ":" + q + String(Mode) + q + c +
+                              q + "Humlvl" + q + ":" + q + String(humlvl) + q + c +
                               q + "HumMax" + q + ":" + q + String(HumMax) + q + c +
                               q + "HumMin" + q + ":" + q + String(HumMin) + q + c +
                               q + "Quantity" + q + ":" + q + String(Quantity) + q + c +
