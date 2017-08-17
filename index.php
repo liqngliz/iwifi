@@ -16,6 +16,7 @@ include 'mysql.php';
 
 $DeviceID = $_GET["DeviceID"];
 $humlvl = $_GET["humlvl"];
+$lightlvl = $_GET["lightlvl"];
 $Alert = $_GET["Alert"];
 $WateredID = $_GET["WateredID"];
 $DeviceIP = getRealIpAddr();
@@ -76,8 +77,8 @@ function getRealIpAddr()
 
     $DeviceIP = "'".$DeviceIP."'";
     $DeviceID = "'".$DeviceID."'";
-    //Update device settings on server database
-    $update = "UPDATE `Devices` SET `Humlvl` = ".$humlvl.", `Alert` = ".$Alert.", `WaterNow` = ".$keepWatering.", `IPV4/V6` = ".$DeviceIP." WHERE `UDID` = ".$DeviceID;
+    //Update device settings on server
+    $update = "UPDATE `Devices` SET `Humlvl` = ".$humlvl.", `Lightlvl` = ".$lightlvl.", `Alert` = ".$Alert.", `WaterNow` = ".$keepWatering.", `IPV4/V6` = ".$DeviceIP." WHERE `UDID` = ".$DeviceID;
     //echo $update;
     $stmt2 = $pdo->query($update);
 
