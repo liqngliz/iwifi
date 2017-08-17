@@ -18,8 +18,7 @@
  This example is written for a network using WPA encryption. For
  WEP or WPA, change the Wifi.begin() call accordingly.
 
- Built on ESP32, ESP8266
- Expected compatibility with all devices with WiFi.softAP().
+ Written for ESP32
  
  created Aug 2017
  by Ang Li
@@ -82,6 +81,8 @@ void setup() {
   //Start serial communications
   Serial.begin(9600);      // initialize serial communication
   delay(500);
+  //TODO Close valve
+  
   Serial.println();
   Serial.println("Starting Irigy");
   
@@ -127,24 +128,34 @@ void setup() {
   server.begin();                           // start the web server on port 80
 
   delay(1000);
-  
+
 }
 
 
 void loop() {
+  //User starts Irigy
 
+  if (measureTimeElapsed > measuredelay) {
+    //Read the water level
+    waterlvl = 4095 - analogRead(analogWaterPin);
+    humlvl = waterlvl;
+    Serial.println(humlvl);
+    //Read the light level
+    
+    //Reset timer for next second
+    measureTimeElapsed = 0;
+  }
 
+  //TODO If humlvl < hummin water water until (humlvl-hummin) > hummax/2, if humlvl does not increase in 5 seconds issue alert not enough water
+  //Then water until humlvl >= hummax/4 at rate of 1.5 seconds with 2 second delay
+  //User can then choose to top off
+  //add last watered in seconds
+ 
+  //Save the current hum lvl in humlvl array of last 10 measurements
+  //If the all 3 measurements are 0 do not open valve, only open if all 3 moisture readings are constant or if user starts
+  //If the change between the last 7 measurements and last 2 measurements is greater than Minhum/2 and current humlvl < minhum, do not turn on
+  //Ask if user has pulled out irigy
 
-if (measureTimeElapsed > measuredelay) {
-  //Read the water level
-  waterlvl = 4095 - analogRead(analogWaterPin);
-  humlvl = waterlvl;
-  Serial.println(humlvl);
-  //Read the light level
-  
-  //Reset timer for next second
-  measureTimeElapsed = 0;
-}
   //Check wifi status
   if (status != WL_CONNECTED) {
     WiFiConnected = "false";
